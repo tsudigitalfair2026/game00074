@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>ユニコーン☆スター迷路</title>
+<style>
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+-webkit-tap-highlight-color:transparent;
+}
+html,body{
+width:100%;
+height:100%;
+overflow:hidden;
+touch-action:none;
+font-family:sans-serif;
+background:linear-gradient(180deg,#8fd3ff,#f7f1ff);
+}
+.screen{
+display:none;
+width:100%;
+height:100%;
+padding:10px;
+}
+.active{
+display:flex;
+flex-direction:column;
+align-items:center;
+justify-content:center;
+}
+.card{
+background:rgba(255,255,255,.95);
+border-radius:18px;
+padding:18px;
+width:min(95vw,520px);
+text-align:center;
+box-shadow:0 6px 18px rgba(0,0,0,.15);
+}
+h1{
+color:#7a2cff;
+margin-bottom:12px;
+}
+button{
+width:100%;
+padding:16px;
+margin-top:12px;
+border:none;
+border-radius:14px;
+font-size:20px;
+font-weight:bold;
+background:#7a2cff;
+color:#fff;
+}
+#hud{
+width:min(95vw,520px);
+display:flex;
+justify-content:space-between;
+font-size:18px;
+font-weight:bold;
+margin:6px auto;
+gap:8px;
+flex-wrap:wrap;
+}
+#gameArea{
+width:min(95vw,520px);
+height:min(95vw,520px);
+display:grid;
+gap:2px;
+background:#fff;
+padding:2px;
+border-radius:18px;
+box-shadow:0 6px 18px rgba(0,0,0,.15);
+touch-action:none;
+}
+.cell{
+display:flex;
+align-items:center;
+justify-content:center;
+border-radius:8px;
+font-size:clamp(18px,5vw,30px);
+}
+.floor{background:#eef2ff;}
+.wall{background:#42507a;}
+.goal{background:#98ff98;}
+.star{background:#ffe46a;}
+.fairy{background:#ffd8ff;}
+.player{background:#ffcdf8;}
+#controls{
+display:grid;
+grid-template-columns:80px 80px 80px;
+grid-template-rows:80px 80px;
+gap:8px;
+margin-top:10px;
+}
+.ctrl{
+font-size:30px;
+}
+.rank{
+font-size:36px;
+font-weight:bold;
+color:#ff8a00;
+margin-top:12px;
+}
+.desc{
+line-height:1.8;
+}
+</style>
+</head>
+<body>
+
+<div id="startScreen" class="screen active">
+<div class="card">
+<h1>🦄 ユニコーン☆スター迷路</h1>
+<div class="desc">
+ゴールまで必ず行ける迷路です！<br>
+⭐を取ると5秒間無敵！<br>
+🧚妖精を集めると50点ボーナス！<br>
+🏁ゴールで100点！<br>
+30秒で高得点を目指そう！
+</div>
+<button id="startBtn">スタート</button>
+</div>
+</div>
+
+<div id="gameScreen" class="screen">
+<div id="hud">
+<div>🏆 <span id="score">0</span></div>
+<div>🧚 <span id="fairyCount">0</span></div>
+<div>⏰ <span id="time">30</span></div>
+</div>
+
+<div id="gameArea"></div>
+
+<div id="controls">
+<div></div>
+<button class="ctrl" data-dir="up">⬆️</button>
+<div></div>
+<button class="ctrl" data-dir="left">⬅️</button>
+<button class="ctrl" data-dir="down">⬇️</button>
+<button class="ctrl" data-dir="right">➡️</button>
+</div>
+</div>
+
+<div id="resultScreen" class="screen">
+<div class="card">
+<h1>結果発表</h1>
+<div style="font-size:28px;margin-top:10px;">
+スコア：<span id="finalScore">0</span>
+</div>
+<div style="font-size:22px;margin-top:10px;">
+集めた妖精：<span id="finalFairy">0</span>
+</div>
+<div id="rank" class="rank">C</div>
+<button id="restartBtn">もう一度遊ぶ</button>
+</div>
+</div>
+
+<script>
+const SIZE=8;
+
+let board=[];
+let score=0;
+let timeLeft=30;
+let fairyTotal=0;
+let timer=null;
+let starMode=false;
+let starTimeout=null;
+
+const gameArea=document.getElementById("gameArea");
+const scoreEl=document.getElementById("score");
+const timeEl=document.getElementById("time");
+const fairyEl=document.getElementById("fairyCount");
+
+const startScreen=document.getElementById("startScreen");
+const gameScreen=document.getElementById("gameScreen");
+const resultScreen=document.getElementById("resultScreen");
+
+let player={x:0,y:0};
+
+function show(screen){
+[startScreen,gameScreen,resultScreen].forEach(s=>s.classList.remove("active"));
+screen.classList.add("active");
+}
+
+function randomFreeCell(){
+let cells=[];
+for(let y=0;y<SIZE;y++){
+for(let x=0;x<SIZE;x++){
+if(board[y][x]==="F"){
+cells.push({x,y});
+}
+}
+}
+return cells[Math.floor(Math.random()*cells.length)];
+}
+
+function createGuaranteedMaze(){
+
+board=[];
+
+for(let y=0;y<SIZE;y++){
+board[y]=[];
+for(let x=0;x<SIZE;x++){
+board[y][x]="W";
+}
+}
+
+let x=0;
+let y=0;
+board[y][x]="F";
+
+while(x<SIZE-1 || y<SIZE-1){
+
+let right;
+
+if(x===SIZE-1){
+right=false;
+}else if(y===SIZE-1){
+right=true;
+}else{
+right=Math.random()<0.5;
+}
+
+if(right)x++;
+else y++;
+
+board[y][x]="F";
+}
+
+for(let yy=0;yy<SIZE;yy++){
+for(let xx=0;xx<SIZE;xx++){
+if(board[yy][xx]==="W" && Math.random()<0.45){
+board[yy][xx]="F";
+}
+}
+}
+
+board[SIZE-1][SIZE-1]="G";
+
+let star=randomFreeCell();
+board[star.y][star.x]="S";
+
+let fairy=randomFreeCell();
+board[fairy.y][fairy.x]="Y";
+
+player={x:0,y:0};
+
+render();
+}
+
+function render(){
+
+gameArea.style.gridTemplateColumns=`repeat(${SIZE},1fr)`;
+gameArea.innerHTML="";
+
+for(let y=0;y<SIZE;y++){
+for(let x=0;x<SIZE;x++){
+
+const cell=document.createElement("div");
+cell.className="cell";
+
+if(player.x===x && player.y===y){
+cell.classList.add("player");
+cell.textContent=starMode ? "🌟🦄" : "🦄";
+}
+else if(board[y][x]==="W"){
+cell.classList.add("wall");
+}
+else if(board[y][x]==="G"){
+cell.classList.add("goal");
+cell.textContent="🏁";
+}
+else if(board[y][x]==="S"){
+cell.classList.add("star");
+cell.textContent="⭐";
+}
+else if(board[y][x]==="Y"){
+cell.classList.add("fairy");
+cell.textContent="🧚";
+}
+else{
+cell.classList.add("floor");
+}
+
+gameArea.appendChild(cell);
+}
+}
+}
+
+function move(dx,dy){
+
+let nx=player.x+dx;
+let ny=player.y+dy;
+
+if(nx<0||ny<0||nx>=SIZE||ny>=SIZE)return;
+
+let target=board[ny][nx];
+
+if(target==="W" && !starMode)return;
+
+player.x=nx;
+player.y=ny;
+
+if(target==="S"){
+board[ny][nx]="F";
+
+starMode=true;
+
+clearTimeout(starTimeout);
+
+starTimeout=setTimeout(()=>{
+starMode=false;
+render();
+},5000);
+}
+
+if(target==="Y"){
+board[ny][nx]="F";
+score+=50;
+fairyTotal++;
+scoreEl.textContent=score;
+fairyEl.textContent=fairyTotal;
+}
+
+if(target==="G"){
+score+=100;
+scoreEl.textContent=score;
+createGuaranteedMaze();
+return;
+}
+
+render();
+}
+
+function startGame(){
+
+score=0;
+fairyTotal=0;
+timeLeft=30;
+starMode=false;
+
+scoreEl.textContent=0;
+fairyEl.textContent=0;
+timeEl.textContent=30;
+
+createGuaranteedMaze();
+
+show(gameScreen);
+
+clearInterval(timer);
+
+timer=setInterval(()=>{
+timeLeft--;
+timeEl.textContent=timeLeft;
+
+if(timeLeft<=0){
+gameOver();
+}
+},1000);
+}
+
+function gameOver(){
+
+clearInterval(timer);
+
+document.getElementById("finalScore").textContent=score;
+document.getElementById("finalFairy").textContent=fairyTotal;
+
+let rank="C";
+
+if(score>=1200) rank="S";
+else if(score>=800) rank="A";
+else if(score>=400) rank="B";
+
+document.getElementById("rank").textContent=rank;
+
+show(resultScreen);
+}
+
+document.getElementById("startBtn").addEventListener("click",startGame);
+document.getElementById("restartBtn").addEventListener("click",startGame);
+
+document.querySelectorAll(".ctrl").forEach(btn=>{
+btn.addEventListener("click",()=>{
+const d=btn.dataset.dir;
+
+if(d==="up") move(0,-1);
+if(d==="down") move(0,1);
+if(d==="left") move(-1,0);
+if(d==="right") move(1,0);
+});
+});
+
+let sx=0;
+let sy=0;
+
+gameArea.addEventListener("touchstart",e=>{
+sx=e.touches[0].clientX;
+sy=e.touches[0].clientY;
+},{passive:false});
+
+gameArea.addEventListener("touchend",e=>{
+let ex=e.changedTouches[0].clientX;
+let ey=e.changedTouches[0].clientY;
+
+let dx=ex-sx;
+let dy=ey-sy;
+
+if(Math.abs(dx)>Math.abs(dy)){
+if(dx>20) move(1,0);
+if(dx<-20) move(-1,0);
+}else{
+if(dy>20) move(0,1);
+if(dy<-20) move(0,-1);
+}
+},{passive:false});
+
+let mouseDown=false;
+
+gameArea.addEventListener("mousedown",e=>{
+mouseDown=true;
+sx=e.clientX;
+sy=e.clientY;
+});
+
+window.addEventListener("mouseup",e=>{
+if(!mouseDown) return;
+
+mouseDown=false;
+
+let dx=e.clientX-sx;
+let dy=e.clientY-sy;
+
+if(Math.abs(dx)>Math.abs(dy)){
+if(dx>20) move(1,0);
+if(dx<-20) move(-1,0);
+}else{
+if(dy>20) move(0,1);
+if(dy<-20) move(0,-1);
+}
+});
+</script>
+
+</body>
+</html>
